@@ -208,7 +208,7 @@ def provision_account(acid_raw: str, org_id: Optional[str] = None) -> str:
     put_text(tops["worklog"] + "decisions.md", "# Decisions\n", acid=acid_raw, org_id=org_id, content_type="text/markdown")
 
     # profiles.md (always create)
-    put_text(tops["profiles"] + "profiles.md", "# Profiles\n\nLoose notes on profile changes.\n", acid=acid_raw, org_id=org_id, content_type="text/markdown")
+    put_text(tops["profiles"] + "profiles.md", "# Profiles\n", acid=acid_raw, org_id=org_id, content_type="text/markdown")
 
     # Optional sample seeding
     if SEED_SAMPLE_FILES:
