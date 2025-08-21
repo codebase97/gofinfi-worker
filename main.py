@@ -1,73 +1,37 @@
 import os
-from typing import Optional, List
-
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Request, Header
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-
-from aws import provision_account, fmt_acid_display
+import uvicorn
+from aws import scaffold_account
 
 app = FastAPI()
 
-PROVISIONER_SECRET = os.getenv("PROVISIONER_SECRET")
-
-
-class PersonIn(BaseModel):
-    name: str
-    notes: Optional[str] = None
-    devices: Optional[List[str]] = None
-    vehicles: Optional[List[str]] = None
-
-
-class CompanyIn(BaseModel):
-    name: str
-    notes: Optional[str] = None
-    domains: Optional[List[str]] = None
-
-
-class ProvisionAccountRequest(BaseModel):
-    # Accept either raw 9-char or display 'acid-XXX-XX-XXXX'
-    acid: str
-    org_id: Optional[str] = None
-    name: Optional[str] = None
-    persons: Optional[List[PersonIn]] = None
-    companies: Optional[List[CompanyIn]] = None
+PROVISIONER_SECRET = os.getenv("PROVISIONER_SECRET", "changeme")
 
 
 @app.get("/healthz")
-def healthz():
-    return {"ok": True, "service": "provisioner", "env": os.getenv("RAILWAY_ENVIRONMENT", "local")}
+async def healthz():
+    return {"ok": True, "service": "worker", "env": os.getenv("ENV", "development")}
 
 
-@app.post("/provision-account")
-def provision_account_endpoint(
-    payload: ProvisionAccountRequest,
-    x_internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret"),
-):
-    # Simple shared-secret check (Railway var: PROVISIONER_SECRET)
-    if PROVISIONER_SECRET and x_internal_secret != PROVISIONER_SECRET:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+@app.post("/create-account")
+async def create_account(request: Request, x_internal_secret: str = Header(None)):
+    if x_internal_secret != PROVISIONER_SECRET:
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
 
-    try:
-        base_prefix = provision_account(
-            acid_input=payload.acid,
-            org_id=payload.org_id,
-            name=payload.name,
-            persons=[p.dict() for p in (payload.persons or [])],
-            companies=[c.dict() for c in (payload.companies or [])],
-        )
-        return JSONResponse(
-            {
-                "ok": True,
-                "acid": payload.acid,
-                "acid_display": fmt_acid_display(payload.acid),
-                "prefix": base_prefix,
-                "profiles_seeded": {
-                    "persons_passed": len(payload.persons or []),
-                    "companies_passed": len(payload.companies or []),
-                    "defaults_used": (len(payload.persons or []) == 0 and len(payload.companies or []) == 0),
-                },
-            }
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Provision failed: {e}")
+    body = await request.json()
+    acid = body.get("acid")
+    org_id = body.get("org_id")
+    name = body.get("name")
+    persons = body.get("persons", [])
+    companies = body.get("companies", [])
+
+    if not acid or not org_id or not name:
+        return JSONResponse(status_code=400, content={"error": "Missing required fields"})
+
+    result = scaffold_account(acid, org_id, name, persons, companies)
+    return result
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 3000)))
