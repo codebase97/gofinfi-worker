@@ -20,6 +20,12 @@ s3 = boto3.client("s3", region_name=AWS_REGION)
 def _iso_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+def _generate_acid_string() -> str:
+    alphabet = string.ascii_letters + string.digits
+    s1 = "".join(random.choices(alphabet, k=3))
+    s2 = "".join(random.choices(alphabet, k=2))
+    s3 = "".join(random.choices(alphabet, k=4))
+    return s1 + s2 + s3
 
 def _fmt_acid_display(acid: str) -> str:
     a = acid.strip()
@@ -193,6 +199,13 @@ class UploadUrlReq(BaseModel):
     path: str
     content_type: Optional[str] = "application/octet-stream"
     expires_in: Optional[int] = 600
+
+@router.get("/acid")
+def get_acid():
+    acid_base = _generate_acid_string()
+    acid = f"{acid_base[0:3]}-{acid_base[3:5]}-{acid_base[5:9]}"
+    acid_display = _fmt_acid_display(acid_base)
+    return {"acid": acid, "acid_display": acid_display}
 
 
 @router.post("/v201/accounts/{acid}/profiles/person")
